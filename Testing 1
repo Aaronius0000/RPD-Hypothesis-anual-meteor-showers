@@ -1,13 +1,23 @@
 import rebound
 import numpy as np
+
+# Initialize the simulation
 sim = rebound.Simulation()
 sim.G = 4 * np.pi**2  # G in AU^3 / (M_sun * year^2)
-sim.add(m=1.0, x=0, y=0, z=0, vx=0, vy=0, vz=0)
-m_em1 = 8.4 * 9.54e-4
+
+# Add the Sun
+sim.add(m=1.0, x=0, y=0, z=0, vx=0, vy=0, vz=0)  # Mass in M_sun
+
+# Add EM1 at 2.8 AU with a circular orbit
+m_em1 = 8.4 * 9.54e-4  # 8.4 Jupiter masses in M_sun = 8.0136e-3 M_sun
 sim.add(m=m_em1, a=2.8, e=0, inc=0, Omega=0, omega=0, f=0)
+
+# Get EM1's position and velocity
 em1 = sim.particles[1]
 x_em1, y_em1, z_em1 = em1.x, em1.y, em1.z
 vx_em1, vy_em1, vz_em1 = em1.vx, em1.vy, em1.vz
+
+# Define moon properties (ordered by density: Mars, Ceres, Pluto, Charon, Orcus)
 moons = [
     {"name": "Mars", "m": 3.21e-7, "a": 0.03},      # 6.39e23 kg / 1.989e30
     {"name": "Ceres", "m": 4.72e-10, "a": 0.045},   # 9.38e20 kg / 1.989e30
@@ -15,6 +25,8 @@ moons = [
     {"name": "Charon", "m": 7.99e-10, "a": 0.10125},# 1.59e21 kg / 1.989e30
     {"name": "Orcus", "m": 3.17e-10, "a": 0.151875} # 6.3e20 kg / 1.989e30
 ]
+
+# Add moons with positions and velocities relative to EM1
 for moon in moons:
     a_moon = moon["a"]
     v_moon = np.sqrt(sim.G * m_em1 / a_moon)
@@ -23,18 +35,24 @@ for moon in moons:
         x=x_em1 + a_moon, y=y_em1, z=z_em1,
         vx=vx_em1, vy=vy_em1 + v_moon, vz=vz_em1
     )
-sim.add(m=2.45e-6, a=0.723, e=0, inc=0, Omega=0, omega=0, f=0)
-sim.add(m=9.54e-4, a=5.2, e=0, inc=0, Omega=0, omega=0, f=0)
+
+# Add other planets (e.g., Venus and Jupiter)
+sim.add(m=2.45e-6, a=0.723, e=0, inc=0, Omega=0, omega=0, f=0)  # Venus
+sim.add(m=9.54e-4, a=5.2, e=0, inc=0, Omega=0, omega=0, f=0)    # Jupiter
+
+# Simulate EM1's explosion at t=0: remove EM1, add EM2 and red asteroids
 m_em2 = 3.003e-6  # Earth's mass in M_sun
-sim.remove(1)
-em2_idx = 1
+sim.remove(1)  # Remove EM1 (index 1)
+em2_idx = 1    # EM2 will take index 1
 sim.add(m=m_em2, x=x_em1, y=y_em1, z=z_em1, vx=vx_em1, vy=vy_em1, vz=vz_em1)
+
+# Add 100 red asteroids near EM2 with perturbed velocities
 n_red = 100
 for _ in range(n_red):
-    dx = np.random.normal(0, 0.01)
+    dx = np.random.normal(0, 0.01)  # Position perturbations in AU
     dy = np.random.normal(0, 0.01)
     dz = np.random.normal(0, 0.01)
-    dvx = np.random.normal(0, 0.1)
+    dvx = np.random.normal(0, 0.1)  # Velocity perturbations in AU/year
     dvy = np.random.normal(0, 0.1)
     dvz = np.random.normal(0, 0.1)
     sim.add(
@@ -42,14 +60,20 @@ for _ in range(n_red):
         x=x_em1 + dx, y=y_em1 + dy, z=z_em1 + dz,
         vx=vx_em1 + dvx, vy=vy_em1 + dvy, vz=vz_em1 + dvz
     )
+
+# Integrate to t=10 years (first orbital adjustment)
 sim.integrate(10)
+
+# Adjust EM2's orbit to have perihelion at 1 AU
 em2 = sim.particles[em2_idx]
 r = np.sqrt(em2.x**2 + em2.y**2)
-v_new = np.sqrt(sim.G * 1.0 * (2 / r - 1 / 1.9))
-tangent_x, tangent_y = -em2.y / r, em2.x / r
+v_new = np.sqrt(sim.G * 1.0 * (2 / r - 1 / 1.9))  # Velocity for a=1.9 AU
+tangent_x, tangent_y = -em2.y / r, em2.x / r      # Tangential direction
 em2.vx = v_new * tangent_x
 em2.vy = v_new * tangent_y
 em2.vz = 0
+
+# Add 100 yellow asteroids near EM2
 n_yellow = 100
 for _ in range(n_yellow):
     dx = np.random.normal(0, 0.01)
@@ -63,12 +87,18 @@ for _ in range(n_yellow):
         x=em2.x + dx, y=em2.y + dy, z=em2.z + dz,
         vx=em2.vx + dvx, vy=em2.vy + dvy, vz=em2.vz + dvz
     )
+
+# Integrate to t=20 years (second orbital adjustment)
 sim.integrate(20)
+
+# Circularize EM2's orbit at current radius (assume near 1 AU)
 r_em2 = np.sqrt(em2.x**2 + em2.y**2)
-v_circ = np.sqrt(sim.G * 1.0 / r_em2)
+v_circ = np.sqrt(sim.G * 1.0 / r_em2)  # Circular velocity at current r
 em2.vx = v_circ * (-em2.y / r_em2)
 em2.vy = v_circ * (em2.x / r_em2)
 em2.vz = 0
+
+# Add 100 green asteroids near EM2
 n_green = 100
 for _ in range(n_green):
     dx = np.random.normal(0, 0.01)
@@ -82,10 +112,13 @@ for _ in range(n_green):
         x=em2.x + dx, y=em2.y + dy, z=em2.z + dz,
         vx=em2.vx + dvx, vy=em2.vy + dvy, vz=em2.vz + dvz
     )
-dt = 0.01
+
+# Integrate from t=20 to t=120 years, checking for close approaches
+dt = 0.01  # Time step in years
 for t in np.arange(20, 120, dt):
     sim.integrate(t)
     em2_pos = np.array([em2.x, em2.y, em2.z])
+    # Check asteroids (indices 7 to 7+n_red+n_yellow+n_green-1)
     for i in range(7, 7 + n_red + n_yellow + n_green):
         ast = sim.particles[i]
         ast_pos = np.array([ast.x, ast.y, ast.z])
