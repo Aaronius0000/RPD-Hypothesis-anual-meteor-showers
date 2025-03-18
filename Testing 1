@@ -1,0 +1,96 @@
+import rebound
+import numpy as np
+sim = rebound.Simulation()
+sim.G = 4 * np.pi**2  # G in AU^3 / (M_sun * year^2)
+sim.add(m=1.0, x=0, y=0, z=0, vx=0, vy=0, vz=0)
+m_em1 = 8.4 * 9.54e-4
+sim.add(m=m_em1, a=2.8, e=0, inc=0, Omega=0, omega=0, f=0)
+em1 = sim.particles[1]
+x_em1, y_em1, z_em1 = em1.x, em1.y, em1.z
+vx_em1, vy_em1, vz_em1 = em1.vx, em1.vy, em1.vz
+moons = [
+    {"name": "Mars", "m": 3.21e-7, "a": 0.03},      # 6.39e23 kg / 1.989e30
+    {"name": "Ceres", "m": 4.72e-10, "a": 0.045},   # 9.38e20 kg / 1.989e30
+    {"name": "Pluto", "m": 6.59e-9, "a": 0.0675},   # 1.31e22 kg / 1.989e30
+    {"name": "Charon", "m": 7.99e-10, "a": 0.10125},# 1.59e21 kg / 1.989e30
+    {"name": "Orcus", "m": 3.17e-10, "a": 0.151875} # 6.3e20 kg / 1.989e30
+]
+for moon in moons:
+    a_moon = moon["a"]
+    v_moon = np.sqrt(sim.G * m_em1 / a_moon)
+    sim.add(
+        m=moon["m"],
+        x=x_em1 + a_moon, y=y_em1, z=z_em1,
+        vx=vx_em1, vy=vy_em1 + v_moon, vz=vz_em1
+    )
+sim.add(m=2.45e-6, a=0.723, e=0, inc=0, Omega=0, omega=0, f=0)
+sim.add(m=9.54e-4, a=5.2, e=0, inc=0, Omega=0, omega=0, f=0)
+m_em2 = 3.003e-6  # Earth's mass in M_sun
+sim.remove(1)
+em2_idx = 1
+sim.add(m=m_em2, x=x_em1, y=y_em1, z=z_em1, vx=vx_em1, vy=vy_em1, vz=vz_em1)
+n_red = 100
+for _ in range(n_red):
+    dx = np.random.normal(0, 0.01)
+    dy = np.random.normal(0, 0.01)
+    dz = np.random.normal(0, 0.01)
+    dvx = np.random.normal(0, 0.1)
+    dvy = np.random.normal(0, 0.1)
+    dvz = np.random.normal(0, 0.1)
+    sim.add(
+        m=1e-12,  # Small mass for asteroids
+        x=x_em1 + dx, y=y_em1 + dy, z=z_em1 + dz,
+        vx=vx_em1 + dvx, vy=vy_em1 + dvy, vz=vz_em1 + dvz
+    )
+sim.integrate(10)
+em2 = sim.particles[em2_idx]
+r = np.sqrt(em2.x**2 + em2.y**2)
+v_new = np.sqrt(sim.G * 1.0 * (2 / r - 1 / 1.9))
+tangent_x, tangent_y = -em2.y / r, em2.x / r
+em2.vx = v_new * tangent_x
+em2.vy = v_new * tangent_y
+em2.vz = 0
+n_yellow = 100
+for _ in range(n_yellow):
+    dx = np.random.normal(0, 0.01)
+    dy = np.random.normal(0, 0.01)
+    dz = np.random.normal(0, 0.01)
+    dvx = np.random.normal(0, 0.1)
+    dvy = np.random.normal(0, 0.1)
+    dvz = np.random.normal(0, 0.1)
+    sim.add(
+        m=1e-12,
+        x=em2.x + dx, y=em2.y + dy, z=em2.z + dz,
+        vx=em2.vx + dvx, vy=em2.vy + dvy, vz=em2.vz + dvz
+    )
+sim.integrate(20)
+r_em2 = np.sqrt(em2.x**2 + em2.y**2)
+v_circ = np.sqrt(sim.G * 1.0 / r_em2)
+em2.vx = v_circ * (-em2.y / r_em2)
+em2.vy = v_circ * (em2.x / r_em2)
+em2.vz = 0
+n_green = 100
+for _ in range(n_green):
+    dx = np.random.normal(0, 0.01)
+    dy = np.random.normal(0, 0.01)
+    dz = np.random.normal(0, 0.01)
+    dvx = np.random.normal(0, 0.1)
+    dvy = np.random.normal(0, 0.1)
+    dvz = np.random.normal(0, 0.1)
+    sim.add(
+        m=1e-12,
+        x=em2.x + dx, y=em2.y + dy, z=em2.z + dz,
+        vx=em2.vx + dvx, vy=em2.vy + dvy, vz=em2.vz + dvz
+    )
+dt = 0.01
+for t in np.arange(20, 120, dt):
+    sim.integrate(t)
+    em2_pos = np.array([em2.x, em2.y, em2.z])
+    for i in range(7, 7 + n_red + n_yellow + n_green):
+        ast = sim.particles[i]
+        ast_pos = np.array([ast.x, ast.y, ast.z])
+        dist = np.linalg.norm(ast_pos - em2_pos)
+        if dist < 0.01:  # Close approach threshold in AU
+            print(f"t={t:.2f} years: Asteroid {i-6} at {dist:.5f} AU from EM2")
+
+print("Simulation complete.")
